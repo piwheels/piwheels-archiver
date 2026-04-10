@@ -1,0 +1,2 @@
+echo "Run from the master:"
+echo "xargs -P 4 -a files.txt -I{} rm -v /home/piwheels/www/simple/{}"
