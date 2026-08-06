@@ -1,2 +1,3 @@
 echo "Run from the master:"
 echo "xargs -P 4 -a files.txt -I{} rm -v /home/piwheels/www/simple/{}"
+echo "sed 's/\$/.metadata/' files.txt | xargs -P 4 -I{} rm -v /home/piwheels/www/simple/{}"
