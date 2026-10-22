@@ -1,4 +1,13 @@
+from pathlib import Path
+
 from piwheels.master.db import Database
+
+
+def human_size(n):
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if n < 1024 or unit == "TB":
+            return f"{n:,.1f} {unit}"
+        n /= 1024
 
 
 db = Database("postgresql:///piwheels")
@@ -44,3 +53,23 @@ with open(files_file, "w") as f:
         f"{package}/{filename}\n"
         for package, filename, c in sorted(rows)
     )
+
+# Measure what step 3 will actually transfer: cp -P copies symlinks as links,
+# so only regular files (wheels and their .metadata) take up space
+simple = Path("/home/piwheels/www/simple")
+total_bytes = 0
+real_files = symlinks = missing = 0
+for package, filename, c in rows:
+    for path in (simple / package / filename, simple / package / f"{filename}.metadata"):
+        if path.is_symlink():
+            symlinks += 1
+        elif path.is_file():
+            real_files += 1
+            total_bytes += path.stat().st_size
+        else:
+            missing += 1
+
+print(
+    f"{human_size(total_bytes)} to transfer in {real_files:,} files "
+    f"(plus {symlinks:,} symlinks, {missing:,} missing)"
+)
