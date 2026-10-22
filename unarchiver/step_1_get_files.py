@@ -1,6 +1,5 @@
 import sys
 from itertools import groupby
-from pathlib import Path
 
 from piwheels.master.db import Database
 
@@ -24,17 +23,7 @@ def parse_size(s):
     return int(s)
 
 
-def measure(path):
-    # cp -P copies symlinks as links, so only regular files take up space
-    if path.is_symlink():
-        return 0, 0, 1, 0
-    if path.is_file():
-        return path.stat().st_size, 1, 0, 0
-    return 0, 0, 0, 1
-
-
 db = Database("postgresql:///piwheels")
-simple = Path("/home/piwheels/archive/www/simple")
 files_file = "files.txt"
 packages_file = "packages.txt"
 limit = parse_size(sys.argv[1]) if len(sys.argv) > 1 else None
@@ -52,17 +41,21 @@ with db._conn.begin():
 			  on d.filename = f.filename
 			 and d.accessed_at > current_timestamp - interval '1 month'
 			where f.location = 'https://archive1.piwheels.org/simple'
+			  and f.deleted_at is null
 			group by b.build_id
 		)
 		select
 			b.build_id,
 			b.package,
 			f.filename,
+			f.filesize,
+			f.filehash,
             dpb.download_count
 		from files f
 		join builds b using (build_id)
 		join downloads_per_build dpb using (build_id)
 		where dpb.download_count > 25
+		  and f.deleted_at is null
 		order by dpb.download_count desc, b.package, b.build_id, f.filename;
     """
     ).all()
@@ -75,21 +68,21 @@ print(
 
 # Take whole builds (keeping armv6l symlinks with their armv7l targets),
 # most downloaded first, until the next build would exceed the limit
+#
+# Sizes are wheels only (from files.filesize; .metadata files aren't
+# recorded). Symlinked wheels (e.g. armv6l -> armv7l) share a hash with
+# their target, so count each distinct hash in a build once
 selected = []
-total_bytes = real_files = symlinks = missing = 0
+total_bytes = unique_files = 0
 for build_id, build_rows in groupby(rows, key=lambda row: row[0]):
     build_rows = list(build_rows)
-    build_stats = [0, 0, 0, 0]
-    for _, package, filename, _ in build_rows:
-        for path in (simple / package / filename, simple / package / f"{filename}.metadata"):
-            build_stats = [a + b for a, b in zip(build_stats, measure(path))]
-    if limit is not None and total_bytes + build_stats[0] > limit:
+    sizes = {filehash: filesize for _, _, _, filesize, filehash, _ in build_rows}
+    build_bytes = sum(sizes.values())
+    if limit is not None and total_bytes + build_bytes > limit:
         break
     selected.extend(build_rows)
-    total_bytes += build_stats[0]
-    real_files += build_stats[1]
-    symlinks += build_stats[2]
-    missing += build_stats[3]
+    total_bytes += build_bytes
+    unique_files += len(sizes)
 
 packages = {row[1] for row in selected}
 if limit is not None:
@@ -101,7 +94,7 @@ if limit is not None:
     if rows and not selected:
         print(
             f"Warning: the first build ({rows[0][1]}, "
-            f"{human_size(build_stats[0])}) is bigger than the limit, so "
+            f"{human_size(build_bytes)}) is bigger than the limit, so "
             f"nothing was selected - raise the limit to make progress"
         )
 
@@ -115,6 +108,7 @@ with open(files_file, "w") as f:
     )
 
 print(
-    f"{human_size(total_bytes)} to transfer in {real_files:,} files "
-    f"(plus {symlinks:,} symlinks, {missing:,} missing)"
+    f"{human_size(total_bytes)} of wheels to transfer in {unique_files:,} "
+    f"files (plus {len(selected) - unique_files:,} symlinks, and .metadata "
+    f"files which aren't counted)"
 )
