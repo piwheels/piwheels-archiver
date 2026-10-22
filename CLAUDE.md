@@ -21,18 +21,20 @@ affected packages.
 
 2. Ensure all package directories exist on the archive server before moving files over
 
-3. Copy files from master to archive, then run step 8's broken symlink check. Stops with an
-error if any are found, so they can be fixed (step 9) before anything goes live in step 4
+3. Copy files from master to archive
 
-4. Write an update query to be run on the database to update locations of files moved (then run the
+4. Identify any broken symlinks among the copied files. Stops with an error if any are found, so
+they're fixed before anything goes live
+
+5. Fix any broken symlinks, then re-run step 4 until it finds none
+
+6. Write an update query to be run on the database to update locations of files moved (then run the
 query)
 
-5. Rewrite the simple index pages for all affected packages, using `piw-rebuild`
+7. Rewrite the simple index pages for all affected packages, using `piw-rebuild`
 
-6. Delete the moved files from the master
+8. Delete the moved files from the master
 
-7. Run `piw-audit` for each affected package to ensure no files are missing or broken
+9. Run `piw-audit` for each affected package to ensure no files are missing or broken
 
-8. Identify any broken symlinks
-
-9. Fix any broken symlinks
+10. Re-run step 4 as a final check for broken symlinks
