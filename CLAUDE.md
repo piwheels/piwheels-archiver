@@ -21,7 +21,8 @@ affected packages.
 
 2. Ensure all package directories exist on the archive server before moving files over
 
-3. Copy files from master to archive
+3. Copy files from master to archive, then run step 8's broken symlink check. Stops with an
+error if any are found, so they can be fixed (step 9) before anything goes live in step 4
 
 4. Write an update query to be run on the database to update locations of files moved (then run the
 query)

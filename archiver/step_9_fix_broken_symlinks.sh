@@ -18,8 +18,9 @@ while read -r f; do
         continue
     fi
 
-    if [[ ! -e "$armv6" && ! -L "$armv6" ]]; then
-        if ! ln -s "$(basename "$armv7")" "$armv6"; then
+    # -e is false for a missing file or a broken link; -f replaces the latter
+    if [[ ! -e "$armv6" ]]; then
+        if ! ln -sfn "$(basename "$armv7")" "$armv6"; then
             echo "${f/armv7l/armv6l}" >> "$failed_armv6"
         fi
     fi
